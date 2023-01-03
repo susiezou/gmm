@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 """
 Author: Jeremy M. Stober
-Program: GMM.PY
+Program: gmm.PY
 Date: Friday, June 24 2011/Volumes/NO NAME/seds/nodes/gmm.py
 Description: A python class for creating and manipulating GMMs.
 """
@@ -60,7 +60,7 @@ class GMM(object):
                     clusters[i].append(d)
 
                 for i in range(ncomps):
-                    print mus[i], clusters[i]
+                    print (mus[i], clusters[i])
                     self.comps.append(Normal(dim, mu = mus[i], sigma = np.cov(clusters[i], rowvar=0)))
 
                 self.priors = np.ones(ncomps, dtype="double") / np.array([len(c) for c in clusters])
@@ -79,7 +79,7 @@ class GMM(object):
                 self.priors = np.ones(ncomps, dtype="double") / np.array([len(c) for c in clusters])
 
             else:
-                raise ValueError, "Unknown method type!"
+                raise ValueError("Unknown method type!")
 
         else:
 
@@ -94,7 +94,7 @@ class GMM(object):
             for i in range(ncomps):
                 self.comps.append(Normal(dim))
 
-            self.priors = np.ones(ncomps,dtype='double') / ncomps
+            self.priors = np.ones(ncomps, dtype='double') / ncomps
 
     def __str__(self):
         res = "%d" % self.dim
@@ -129,7 +129,7 @@ class GMM(object):
 
     def condition(self, indices, x):
         """
-        Create a new GMM conditioned on data x at indices.
+        Create a new gmm conditioned on data x at indices.
         """
         condition_comps = []
         marginal_comps = []
@@ -148,11 +148,14 @@ class GMM(object):
 
         return GMM(params = params)
 
-    def em(self, data, nsteps = 100):
+    def em(self, data, nsteps = 100, specify=False):
 
         k = self.ncomps
         d = self.dim
         n = len(data)
+        X = data[:, :-1]
+        Y = data[:, -1].reshape(-1, 1)
+        d_x = X.shape[1]
 
         for l in range(nsteps):
 
@@ -160,26 +163,53 @@ class GMM(object):
 
             responses = np.zeros((k,n))
 
-            for j in range(n):
-                for i in range(k):
-                    responses[i,j] = self.priors[i] * self.comps[i].pdf(data[j])
 
-            responses = responses / np.sum(responses,axis=0) # normalize the weights
+            for i in range(k):
+                responses[i, :] = self.priors[i] * self.comps[i].pdf_sci(data)
+
+            responses /= np.sum(responses, axis=0) # normalize the weights
 
             # M step
 
-            N = np.sum(responses,axis=1)
+            N = np.sum(responses, axis=1)
 
+            responses = np.mat(responses)
             for i in range(k):
-                mu = np.dot(responses[i,:],data) / N[i]
-                sigma = np.zeros((d,d))
+                if specify:
+                    mu = np.dot(responses[i, :], X) / N[i]
+                    cov_k = np.multiply((X - mu).T, responses[i, :]) @ (X - mu) / N[i]
+                    # update A matrix
+                    X_ = np.multiply((X - mu).T, np.sqrt(responses[i, :]))
+                    yk_ = np.dot(responses[i, :], Y) / N[i]
+                    Y_ = np.multiply((Y - yk_).T, np.sqrt(responses[i, :]))
+                    A = np.dot(Y_, np.linalg.pinv(X_))  # A[k] ~ 1 * D
+                    # update b
+                    b_ = Y - np.dot(X, A.T)
+                    b = np.dot(responses[i, :], b_) / N[i]
+                    # update sigma
+                    sig = np.dot(np.multiply((b_ - b).T, responses[i, :]), (b_ - b)) / N[i]
 
-                for j in range(n):
-                   sigma += responses[i,j] * np.outer(data[j,:] - mu, data[j,:] - mu)
-
-                sigma = sigma / N[i]
-
-                self.comps[i].update(mu,sigma) # update the normal with new parameters
+                    cov_sig = np.zeros((d, d))
+                    cov_sig[:d_x, :d_x] = cov_k
+                    cov_sig[:d_x, d_x:] = cov_k @ A.T
+                    cov_sig[d_x:, :d_x] = A @ cov_k
+                    cov_sig[d_x:, d_x:] = sig + A @ cov_sig[:d_x, d_x:]
+                    # update the normal with new parameters
+                    self.comps[i].update(np.array(np.c_[mu, A @ mu.T + b]).ravel(), cov_sig)
+                    self.comps[i].A_matrix = A
+                    self.comps[i].b = b
+                    self.comps[i].plane_noise = sig
+                    # print("multi-dimension gmm with plane conditions")
+                else:
+                    mu = np.dot(responses[i, :], data) / N[i]
+                    cov_k = np.multiply((data - mu).T, responses[i, :]) @ (data - mu) / N[i]
+                    mu = np.array(mu).ravel()
+                    cov_k = np.array(cov_k)
+                    self.comps[i].update(mu, cov_k)
+                    self.comps[i].A_matrix = cov_k[d_x:, :d_x] @  np.linalg.inv(cov_k[:d_x, :d_x])
+                    self.comps[i].b = mu[d_x:] - self.comps[i].A_matrix @ mu[:d_x].reshape(-1, 1)
+                    self.comps[i].plane_noise = cov_k[d_x:, d_x:] - self.comps[i].A_matrix @ cov_k[:d_x, d_x:]
+                    # print("multi-dimension gmm")
                 self.priors[i] = N[i] / np.sum(N) # normalize the new priors
 
 
@@ -211,19 +241,19 @@ if __name__ == '__main__':
     # x = npr.randn(20, 2)
 
     # print "No data"
-    # gmm = GMM(2,1,2) # possibly also broken
+    # gmm = gmm(2,1,2) # possibly also broken
     # print gmm
 
     # print "Uniform"
-    # gmm = GMM(2,1,2,data = x, method = "uniform")
+    # gmm = gmm(2,1,2,data = x, method = "uniform")
     # print gmm
 
     # print "Random"
-    # gmm = GMM(2,1,2,data = x, method = "random") # broken
+    # gmm = gmm(2,1,2,data = x, method = "random") # broken
     # print gmm
 
     # print "Kmeans"
-    # gmm = GMM(2,1,2,data = x, method = "kmeans") # possibly broken
+    # gmm = gmm(2,1,2,data = x, method = "kmeans") # possibly broken
     # print gmm
 
 
@@ -232,16 +262,16 @@ if __name__ == '__main__':
     y = x + npr.randn(40) # simple linear function
     #y = np.sin(x) + npr.randn(20)
     data = np.vstack([x,y]).T
-    print data.shape
+    print(data.shape)
 
 
     gmm = GMM(dim = 2, ncomps = 4,data = data, method = "random")
-    print gmm
+    print(gmm)
     shownormal(data,gmm)
 
     gmm.em(data,nsteps=1000)
     shownormal(data,gmm)
-    print gmm
+    print(gmm)
     ngmm = gmm.condition([0],[-3])
-    print ngmm.mean()
-    print ngmm.covariance()
+    print(ngmm.mean())
+    print(ngmm.covariance())

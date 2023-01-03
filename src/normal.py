@@ -10,6 +10,9 @@ import numpy as np
 import numpy.linalg as la
 import numpy.random as npr
 import random as pr
+
+from scipy.stats import multivariate_normal
+
 npa = np.array
 ix  = np.ix_ # urgh - sometimes numpy is ugly!
 
@@ -60,6 +63,9 @@ class Normal(object):
         """
 
         self.dim = dim # full data dimension
+        self.A_matrix = None
+        self.b = 0
+        self.plane_noise = 0.01     # var
 
         if not mu is None  and not sigma is None:
             pass
@@ -133,6 +139,16 @@ class Normal(object):
         fE = self.factor
 
         return np.exp(-0.5 * np.dot(np.dot(dx,A),dx)) / fE
+
+    def pdf_sci(self, x):
+        norm = multivariate_normal(mean=self.mu, cov=self.E)
+        return norm.pdf(x)
+
+    @staticmethod
+    def pdf_1d(Y, mu, sigma):
+        Z = (2 * np.pi) ** 0.5 * sigma
+        pdf = np.exp(-0.5 * (Y - mu) ** 2 / sigma ** 2) / Z
+        return pdf
 
     def pdf_mesh(self, x, y):
         # for 2d meshgrids

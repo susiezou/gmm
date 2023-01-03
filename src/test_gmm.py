@@ -5,7 +5,7 @@ Program: TEST_GMM.PY
 Date: Thursday, November  3 2011
 Description: Testing code for gmm with new normal distribution.
 """
-
+import matplotlib.pyplot as plt
 import numpy as np
 npa = np.array
 import pylab as pl
@@ -27,7 +27,7 @@ if False:
 
     #x = Normal(2, data=data)
     #draw2dnormal(x,show=True,axes=pl.gca())
-    print gmm
+    #print gmm
     draw2dgmm(gmm)
     pl.show()
 
@@ -48,19 +48,18 @@ if False:
 
 if True:
 
-    from test_func import noisy_cosine
+    from test_func import noisy_cosine, noisy_step
 
-    x,y = noisy_cosine()
+    x,y = noisy_step()    # noisy_cosine()
     data = np.vstack([x,y]).transpose()
     pl.scatter(data[:,0],data[:,1])
 
     gmm = GMM(dim = 2, ncomps = 2, data = data, method = "kmeans")
-
-    draw2dgmm(gmm)
+    draw2dgmm(gmm, axes=pl.gca())
 
     #pl.show()
 
-    nx = np.arange(0,2 * np.pi, 0.1)
+    nx = np.arange(-np.pi, np.pi, 0.1)
     ny = []
     for i in nx:
         ngmm = gmm.condition([0],[i])
@@ -72,3 +71,17 @@ if True:
     pl.plot(nx,ny,color='red')
     pl.show()
     #print data
+
+    gmm.em(data, nsteps=100, specify=False)
+    pl.figure()
+    pl.scatter(data[:,0],data[:,1])
+    draw2dgmm(gmm, axes=pl.gca())
+    ny2 = []
+    var = []
+    for i in nx:
+        ngmm = gmm.condition([0], [i])
+        var.append(ngmm.covariance())
+        ny2.append(ngmm.mean())
+
+    pl.plot(nx, ny2, color='red')
+    pl.show()

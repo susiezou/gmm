@@ -3,7 +3,7 @@
 Author: Jeremy M. Stober
 Program: TEST_FUNC.PY
 Date: Monday, November  7 2011
-Description: 2-d noisy function for testing GMM/GMR.
+Description: 2-d noisy function for testing gmm/GMR.
 """
 
 import numpy as np
@@ -16,6 +16,13 @@ def noisy_cosine():
     x.sort()
     y = np.cos(x) + 0.1 * npr.randn(100)
     return x,y
+
+
+def noisy_step():
+    x = (npr.rand(200) - 0.5) * np.pi * 2.0
+    x.sort()
+    return x, np.heaviside(x, 0.5) * 2 + 0.05 * npr.randn(200)
+
 
 if __name__ == '__main__':
     #pl.plot(*noisy_cosine())
